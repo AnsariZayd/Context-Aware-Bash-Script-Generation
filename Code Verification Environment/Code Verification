@@ -1,0 +1,93 @@
+import subprocess
+import docker
+
+class CodingAssistant:
+    def __init__(self):
+        self.dialogue_history = []
+        self.docker_client = docker.from_env()
+
+    def process_user_prompt(self, user_prompt):
+        # Add user prompt to dialogue history
+        self.dialogue_history.append(user_prompt)
+
+        # Retrieve context from dialogue history (e.g., last N prompts)
+        context = self.dialogue_history[-2:]  # Consider the last 2 prompts
+
+        # Generate response based on context
+        generated_response = self.generate_response(context)
+
+        # Add generated response to dialogue history
+        self.dialogue_history.append(generated_response)
+
+        # Check if the generated script needs to be run and verified
+        if generated_response.startswith("#!/bin/bash"):
+            # Run the generated script and verify output
+            output, error = self.run_and_verify_script(generated_response)
+
+            # If errors or output mismatch, regenerate the code
+            if error or not self.verify_output(output):
+                generated_response = self.regenerate_code(context, error)
+
+        return generated_response
+
+    def generate_response(self, context):
+        # Placeholder implementation
+        return "Generated Bash Script"
+
+    def run_and_verify_script(self, generated_script):
+        # Create a Docker container to execute the script
+        container = self.docker_client.containers.run("bash", stdin_open=True, tty=True, detach=True)
+
+        # Copy the generated script into the container
+        script_path = "/generated_script.sh"
+        container.put_archive("/", data=generated_script.encode("utf-8"), extract=False)
+
+        # Execute the script inside the container
+        exit_code, output = container.exec_run(f"bash {script_path}")
+
+        # Stop and remove the container
+        container.stop()
+        container.remove()
+
+        return output.decode("utf-8"), exit_code
+
+    def verify_output(self, output):
+        # Extract expected output from the user prompt
+        expected_output = self.extract_expected_output(self.dialogue_history[-2])
+
+        # Compare output with expected output
+        return output.strip() == expected_output.strip()
+
+    def regenerate_code(self, context, error):
+        # Extract error message for LLm input
+        error_message = error.splitlines()[-1]
+
+        # Prompt LLm to regenerate the code based on the error message
+        regenerated_code = self.prompt_llm_for_regeneration(error_message)
+
+        # Add the regenerated code to the dialogue history
+        self.dialogue_history.append(regenerated_code)
+
+        return regenerated_code
+
+    def extract_expected_output(self, user_prompt):
+        # Placeholder implementation
+        return "Expected Output"
+
+    def prompt_llm_for_regeneration(self, error_message):
+        # Placeholder implementation to prompt LLm for code regeneration based on error message
+        return "Regenerated Bash Script"
+
+
+# Example usage
+assistant = CodingAssistant()
+
+# First prompt
+user_prompt1 = "Create a Bash script that recursively scans a directory, identifies duplicate files based on content, and moves them to a designated 'Duplicates' directory while preserving the directory structure."
+generated_response1 = assistant.process_user_prompt(user_prompt1)
+print("Generated Response 1:", generated_response1)
+
+# Second prompt
+user_prompt2 = "Delete the newly created directory"
+generated_response2 = assistant.process_user_prompt(user_prompt2)
+print("Generated Response 2:", generated_response2)
